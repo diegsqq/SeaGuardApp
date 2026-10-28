@@ -1,0 +1,49 @@
+{
+  "functions": [
+    {
+      "codebase": "default",
+      "source": "functions"
+    },
+    {
+      "source": "ai-assistant",
+      "codebase": "ai-assistant",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ]
+    }
+  ],
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "seaguardproject2025",
+          "appId": "1:520008211704:android:020fd6903844b34e16af0d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "seaguardproject2025",
+          "configurations": {
+            "android": "1:520008211704:android:020fd6903844b34e16af0d",
+            "ios": "1:520008211704:ios:68327773490d2a9316af0d",
+            "macos": "1:520008211704:ios:68327773490d2a9316af0d",
+            "web": "1:520008211704:web:5b7eb91ec62a424b16af0d",
+            "windows": "1:520008211704:web:977a0ddcf92f9f1816af0d"
+          }
+        }
+      }
+    }
+  }
+}

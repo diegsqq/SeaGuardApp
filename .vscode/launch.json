@@ -1,0 +1,10 @@
+{
+    "configurations": [
+        {
+            "name": "Flutter (lib\\screens\\philippine_locations.dart)",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib\\screens\\philippine_locations.dart"
+        }
+    ]
+}

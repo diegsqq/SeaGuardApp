@@ -1,0 +1,579 @@
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'educational_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../l10n/app_localizations.dart';
+
+const String kAllResourcesCategory = 'All Resources';
+
+class EducationalSectionPage extends StatefulWidget {
+  final String selectedCategory;
+
+  const EducationalSectionPage({super.key, required this.selectedCategory});
+
+  @override
+  State<EducationalSectionPage> createState() =>
+      _EducationalSectionPageState();
+}
+class EducationalResource {
+  final String id;
+  final String categoryId;
+  final String categoryName;
+  final String title;
+  final String? description;
+  final String type; 
+  final String? pdfUrl;
+  final String? youtubeId;
+
+  EducationalResource({
+    required this.id,
+    required this.categoryId,
+    required this.categoryName,
+    required this.title,
+    required this.type,
+    this.description,
+    this.pdfUrl,
+    this.youtubeId,
+  });
+
+  factory EducationalResource.fromDoc(
+      DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? {};
+
+    final rawCategoryName = data['categoryName'];
+    final categoryName = (rawCategoryName == null ||
+            rawCategoryName.toString().trim().isEmpty)
+        ? kAllResourcesCategory
+        : rawCategoryName.toString();
+
+    return EducationalResource(
+      id: doc.id,
+      categoryId: data['categoryId']?.toString() ?? '',
+      categoryName: categoryName,
+      title: data['title']?.toString() ?? '',
+      description: data['description']?.toString(),
+      type: data['type']?.toString() ?? 'pdf',
+      pdfUrl: data['pdfUrl']?.toString(),
+      youtubeId: data['youtubeId']?.toString(),
+    );
+  }
+}
+
+class _EducationalSectionPageState extends State<EducationalSectionPage> {
+  late String selectedCategory;
+  YoutubePlayerController? _controller;
+  bool _isDropdownOpen = false;
+  bool _isVideoInitialized = false;
+
+  // Firestore data
+  List<String> categories = [];
+  List<EducationalResource> resources = [];
+
+  bool _isLoadingCategories = true;
+  bool _isLoadingResources = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedCategory = widget.selectedCategory;
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('educational_resources')
+          .get();
+      final names = snapshot.docs.map((d) {
+        final data = d.data(); 
+        final raw = data['categoryName'];
+        final name = (raw == null || raw.toString().trim().isEmpty)
+            ? kAllResourcesCategory
+            : raw.toString();
+        return name;
+      }).toSet().toList()
+        ..sort();
+      if (names.isEmpty && snapshot.docs.isNotEmpty) {
+        names.add(kAllResourcesCategory);
+      }
+
+      setState(() {
+        categories = names;
+        _isLoadingCategories = false;
+
+        if (categories.isNotEmpty) {
+          if (!categories.contains(selectedCategory)) {
+            selectedCategory = categories.first;
+          }
+          _loadResourcesFor(selectedCategory);
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingCategories = false;
+        _errorMessage = 'Failed to load categories: $e';
+      });
+    }
+  }
+
+  Future<void> _loadResourcesFor(String categoryName) async {
+    setState(() {
+      _isLoadingResources = true;
+      _errorMessage = null;
+    });
+
+    try {
+      Query<Map<String, dynamic>> query =
+          FirebaseFirestore.instance.collection('educational_resources');
+      if (categoryName != kAllResourcesCategory) {
+        query = query.where('categoryName', isEqualTo: categoryName);
+      }
+
+      final snapshot = await query.get();
+
+      final loaded =
+          snapshot.docs.map(EducationalResource.fromDoc).toList();
+
+      setState(() {
+        resources = loaded;
+        _isLoadingResources = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingResources = false;
+        _errorMessage = 'Failed to load resources: $e';
+      });
+    }
+  }
+
+  void _initializePlayerFromResource(EducationalResource res) {
+    final videoId = res.youtubeId;
+    if (videoId == null || videoId.isEmpty) return;
+
+    _controller?.dispose();
+    _controller = YoutubePlayerController(
+      initialVideoId: videoId,
+      flags: const YoutubePlayerFlags(
+        autoPlay: true,
+        mute: false,
+        enableCaption: true,
+      ),
+    );
+
+    setState(() {
+      _isVideoInitialized = true;
+    });
+  }
+
+  void _changeCategory(String category) {
+    setState(() {
+      selectedCategory = category;
+      _isDropdownOpen = false;
+      _isVideoInitialized = false;
+      _controller?.dispose();
+      _controller = null;
+    });
+    _loadResourcesFor(category);
+  }
+
+  Future<void> _openLink(String url) async {
+    final Uri uri = Uri.parse(_resolveUrl(url));
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+  Widget _buildVideoCard(EducationalResource res) {
+    final videoId = res.youtubeId;
+    if (videoId == null || videoId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final thumbUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
+    final youtubeUrl = 'https://www.youtube.com/watch?v=$videoId';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => _initializePlayerFromResource(res),
+            child: Container(
+              height: 180,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.black12,
+                image: DecorationImage(
+                  fit: BoxFit.cover,
+                  image: NetworkImage(thumbUrl),
+                ),
+              ),
+              child: const Center(
+                child: Icon(Icons.play_circle_fill,
+                    color: Colors.white, size: 60),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            res.title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 4),
+          if (res.description != null && res.description!.isNotEmpty)
+            Text(
+              res.description!,
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: () => _openLink(youtubeUrl),
+            icon: const Icon(Icons.link),
+            label: Text(AppLocalizations.of(context)!.watchOnYouTube),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey.shade200,
+              foregroundColor: Colors.black,
+              minimumSize: const Size(double.infinity, 46),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPdfCard(EducationalResource res) {
+    final url = _resolveUrl(res.pdfUrl ?? '');
+    if (url == null || url.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        elevation: 1,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListTile(
+          leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+          title: Text(
+            res.title,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: res.description != null && res.description!.isNotEmpty
+              ? Text(res.description!)
+              : null,
+          trailing: IconButton(
+            icon: const Icon(Icons.open_in_new),
+            onPressed: () => _openLink(url),
+          ),
+        ),
+      ),
+    );
+  }
+  @override
+  Widget build(BuildContext context) {
+    final videos = resources
+        .where((r) =>
+            r.type.toLowerCase() == 'video' && (r.youtubeId ?? '').isNotEmpty)
+        .toList();
+    final pdfs = resources
+        .where((r) =>
+            r.type.toLowerCase() == 'pdf' && (r.pdfUrl ?? '').isNotEmpty)
+        .toList();
+
+    final mainVideo = videos.isNotEmpty ? videos.first : null;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const EducationalScreen()),
+          ),
+        ),
+        centerTitle: true,
+        title: Text(
+          AppLocalizations.of(context)!.educationalSectionPageTitle,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            color: Colors.black,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                AppLocalizations.of(context)!.categoryLabel,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              if (_isLoadingCategories)
+                const Center(child: CircularProgressIndicator())
+              else if (categories.isEmpty)
+                const Text('No categories available.')
+              else
+                Column(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _isDropdownOpen = !_isDropdownOpen;
+                        });
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.black54),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                selectedCategory,
+                                style: const TextStyle(fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Icon(
+                              _isDropdownOpen
+                                  ? Icons.arrow_drop_up
+                                  : Icons.arrow_drop_down,
+                              color: Colors.black,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_isDropdownOpen)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: Colors.black26),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12.withOpacity(0.1),
+                              blurRadius: 6,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: categories.map((category) {
+                            return InkWell(
+                              onTap: () => _changeCategory(category),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12, horizontal: 12),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: category == categories.last
+                                          ? Colors.transparent
+                                          : Colors.black12,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        category,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                    Radio<String>(
+                                      value: category,
+                                      groupValue: selectedCategory,
+                                      onChanged: (value) =>
+                                          _changeCategory(value!),
+                                      activeColor: Colors.black,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                  ],
+                ),
+
+              const SizedBox(height: 30),
+
+              Center(
+                child: Text(
+                  selectedCategory,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              if (_errorMessage != null)
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red),
+                )
+              else if (_isLoadingResources)
+                const Center(child: CircularProgressIndicator())
+              else if (resources.isEmpty)
+                const Text('No educational resources for this category.')
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (mainVideo != null) ...[
+                      if (_isVideoInitialized && _controller != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: YoutubePlayer(
+                              controller: _controller!,
+                              showVideoProgressIndicator: true,
+                              progressIndicatorColor: Colors.blue,
+                              progressColors: const ProgressBarColors(
+                                playedColor: Colors.blue,
+                                handleColor: Colors.blueAccent,
+                              ),
+                              bottomActions: [
+                                CurrentPosition(),
+                                ProgressBar(isExpanded: true),
+                                const PlaybackSpeedButton(),
+                                FullScreenButton(),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        GestureDetector(
+                          onTap: () => _initializePlayerFromResource(mainVideo),
+                          child: Container(
+                            height: 180,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: Colors.black12,
+                              image: DecorationImage(
+                                fit: BoxFit.cover,
+                                image: NetworkImage(
+                                  'https://img.youtube.com/vi/${mainVideo.youtubeId}/0.jpg',
+                                ),
+                              ),
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.play_circle_fill,
+                                  color: Colors.white, size: 60),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      Text(
+                        mainVideo.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.black,
+                        ),
+                      ),
+                      if (mainVideo.description != null &&
+                          mainVideo.description!.isNotEmpty)
+                        Text(
+                          mainVideo.description!,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () => _openLink(
+                            'https://www.youtube.com/watch?v=${mainVideo.youtubeId}'),
+                        icon: const Icon(Icons.link),
+                        label:
+                            Text(AppLocalizations.of(context)!.youtubeCom),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade200,
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(double.infinity, 46),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                    ],
+                    if (videos.length > 1) ...[
+                      ...videos.skip(1).map(_buildVideoCard).toList(),
+                    ],
+                    if (pdfs.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Documents',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...pdfs.map(_buildPdfCard).toList(),
+                    ],
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _resolveUrl(String url) {
+  if (url.isEmpty) return url;
+  try {
+    final uri = Uri.parse(url);
+    final host = uri.host;
+    if ((host == '127.0.0.1' || host == 'localhost') && !kIsWeb) {
+      if (Platform.isAndroid) {
+        return uri.replace(host: '10.0.2.2').toString();
+      }
+    }
+    return url;
+  } catch (_) {
+    return url;
+  }
+}

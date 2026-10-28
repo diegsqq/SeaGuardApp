@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "520008211704",
+    "firebase_url": "https://seaguardproject2025-default-rtdb.firebaseio.com",
+    "project_id": "seaguardproject2025",
+    "storage_bucket": "seaguardproject2025.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:520008211704:android:020fd6903844b34e16af0d",
+        "android_client_info": {
+          "package_name": "com.example.sea_guard"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "520008211704-s9a8jggkv6lvpoflqbf8ntej0rvkl1qh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sea_guard",
+            "certificate_hash": "51e3ad24de679eab7b7ff18041e725e74e0ce384"
+          }
+        },
+        {
+          "client_id": "520008211704-9advbga086beh33rlu42ojefip8r3r1l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD528CYeRAFOS5qD-6uQPQoAdVj4NBbbSw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "520008211704-9advbga086beh33rlu42ojefip8r3r1l.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "520008211704-i6gp1q9mtbbc63ldn274pfsaptc92ta9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.seaGuard"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // PCG onboarding uploads
+    match /pcg_ids/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    match /pcg_faces/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Detections and other user-generated uploads (kept permissive for now).
+    match /detections/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    match /users/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    match /reports/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    match /sightings/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Fallback: block everything else unless authenticated.
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
